@@ -60,6 +60,7 @@
 #include "server/zone/objects/player/events/StoreSpawnedChildrenTask.h"
 #include "server/zone/objects/player/events/RemoveSpouseTask.h"
 #include "server/zone/objects/player/events/PvpTefRemovalTask.h"
+#include "server/zone/objects/player/events/SpawnHelperDroidTask.h"
 #include "server/zone/managers/visibility/VisibilityManager.h"
 #include "server/zone/managers/jedi/JediManager.h"
 #include "server/zone/objects/player/events/ForceRegenerationEvent.h"
@@ -289,6 +290,19 @@ void PlayerObjectImplementation::unload() {
 
 	unloadSpawnedChildren();
 
+	SortedVector<ManagedReference<ActiveArea*>>* activeAreas = creature->getActiveAreas();
+
+	if (activeAreas != nullptr) {
+		for (int i = 1; i < activeAreas->size(); i++) {
+			ActiveArea* area = activeAreas->get(i);
+
+			if (area == nullptr)
+				continue;
+
+			creature->dropActiveArea(area);
+		}
+	}
+
 	PlayerManager* playerManager = creature->getZoneServer()->getPlayerManager();
 	playerManager->ejectPlayerFromBuilding(creature);
 
@@ -486,7 +500,7 @@ void PlayerObjectImplementation::notifySceneReady() {
 	}
 
 	checkAndShowTOS();
-
+	createHelperDroid();
 }
 
 void PlayerObjectImplementation::sendFriendLists() {
@@ -1978,11 +1992,8 @@ void PlayerObjectImplementation::doRecovery(int latency) {
 	}
 
 	if (isOnline()) {
-		const CommandQueueActionVector* commandQueue = creature->getCommandQueue();
-		const CommandQueueActionVector* immediateQueue = creature->getImmediateQueue();
-
-		if (creature->isInCombat() && creature->getTargetID() != 0 && !creature->isPeaced() && !creature->hasBuff(STRING_HASHCODE("private_feign_buff")) && (commandQueue->size() == 0) && (immediateQueue->size() == 0)
-		&& creature->isNextActionPast() && !creature->isDead() && !creature->isIncapacitated() && cooldownTimerMap->isPast("autoAttackDelay") && !creature->hasAttackDelay() && !creature->hasPostureChangeDelay()) {
+		if (creature->isInCombat() && creature->getTargetID() != 0 && !creature->isPeaced() && !creature->hasBuff(STRING_HASHCODE("private_feign_buff")) && !creature->hasAttackDelay() && !creature->hasPostureChangeDelay() &&
+		creature->isNextActionPast() && creature->getCommandQueueSize() == 0 && !creature->isDead() && !creature->isIncapacitated() && cooldownTimerMap->isPast("autoAttackDelay") && !creature->hasAttackDelay() && !creature->hasPostureChangeDelay()) {
 
 			ManagedReference<SceneObject*> targetObject = zoneServer->getObject(creature->getTargetID());
 
@@ -1992,9 +2003,12 @@ void PlayerObjectImplementation::doRecovery(int latency) {
 				}
 
 				float weaponSpeed = ((uint64)(CombatManager::instance()->calculateWeaponAttackSpeed(creature, creature->getWeapon(), 1.f)));
+				uint64 delay = weaponSpeed * 1000;
+
+				Locker lock(creature);
 
 				// as long as the target is still valid, we still want to continue to queue auto attacks
-				cooldownTimerMap->updateToCurrentAndAddMili("autoAttackDelay", (weaponSpeed) * 1000.f);
+				cooldownTimerMap->updateToCurrentAndAddMili("autoAttackDelay", delay);
 			} else {
 				creature->setTargetID(0);
 			}
@@ -2564,6 +2578,7 @@ void PlayerObjectImplementation::schedulePvpTefRemovalTask(bool removeCrackdownG
 
 		if (removeGcwTefNow) {
 			lastGcwPvpCombatActionTimestamp.updateToCurrentTime();
+			lastPvpAreaCombatActionTimestamp.updateToCurrentTime();
 		}
 
 		if (removeBhTefNow) {
@@ -3372,4 +3387,23 @@ String PlayerObjectImplementation::getPlayedTimeString(bool verbose) const {
 	}
 
 	return buf.toString();
+}
+
+void PlayerObjectImplementation::createHelperDroid() {
+	// Only spawn droid if character is less than 1 days old
+	if (getCharacterAgeInDays() >= 1)
+		return;
+
+	CreatureObject* player = dynamic_cast<CreatureObject*>(parent.get().get());
+
+	if (player == nullptr)
+		return;
+
+	Zone* zone = player->getZone();
+
+	if (zone == nullptr || zone->getZoneName() == "tutorial")
+		return;
+
+	Reference<Task*> createDroid = new SpawnHelperDroidTask(player);
+	createDroid->schedule(5000);
 }

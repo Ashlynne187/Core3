@@ -29,7 +29,27 @@ function Logger:log(message, level)
 		message = message .. " Line: " .. info.currentline
 	end
 
-	logLua(level, message)
+	logLua(level or LT_INFO, message)
+end
+
+function Logger:logEvent(message, level)
+	local info = debug.getinfo(2)
+
+	message = message .. " - "
+
+	if info.name ~= nil then
+		message = message .. "Function: " .. info.name .. " "
+	end
+
+	if (info.source ~= nil) then
+		message = message .. " Source: " .. info.source .. " "
+	end
+
+	if (info.currentline ~= nil) then
+		message = message .. " Line: " .. info.currentline
+	end
+
+	logLuaEvent(level or LT_INFO, message)
 end
 
 return Logger

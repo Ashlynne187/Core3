@@ -56,26 +56,24 @@ crackdownScansEnabled = true
 difficutlyScalingThresholds = {0, 64}
 
 --[[
-	-- TESTING VALUES
-	crackdownScanPrivilegedPlayers = true
-	crackdownPlayerScanCooldown = 15 * 60  -- In seconds
-	crackdownContrabandFineCredits = 10000
-	crackdownContrabandFineFactionPoints = 100
-	crackdownPlanetsWithWildScans = { "corellia", "dantooine", "dathomir", "endor", "lok", "naboo", "rori", "talus", "tatooine", "yavin4"}
-	-- Radius for the area in which all players are retrieved in order to select one of them randomly to be scanned in the wild.
-	-- All objects in the quadtree in that radius will be iterated. Iteration will happen every 10s on each active planet.
-	crackdownPerformanceWildScanPlayerFindRadius = 2560 -- meter radius
+-- TESTING VALUES
+crackdownScanPrivilegedPlayers = true
+wildScanInterval = 2 * 60 -- In seconds
+wildScanChance = 75 -- % chance for a valid scan target to be scanned
+crackdownPlayerScanCooldown = 15 * 60  -- In seconds
+crackdownContrabandFineCredits = 10000
+crackdownContrabandFineFactionPoints = 100
+crackdownPlanetsWithWildScans = { "corellia", "dantooine", "dathomir", "endor", "lok", "naboo", "rori", "talus", "tatooine", "yavin4"}
 ]]
-	-- PRODUCTION SERVER VALUES
-	crackdownScanPrivilegedPlayers = false
-	crackdownScanInterval = 10
-	crackdownPlayerScanCooldown = 2 * 24 * 60 * 60  -- In seconds, 48 hour cooldown
-	crackdownContrabandFineCredits = 10000
-	crackdownContrabandFineFactionPoints = 100
-	crackdownPlanetsWithWildScans = { "corellia", "dantooine", "dathomir", "endor", "lok", "naboo", "rori", "talus", "tatooine", "yavin4"}
-	-- Radius for the area in which all players are retrieved in order to select one of them randomly to be scanned in the wild.
-	-- All objects in the quadtree in that radius will be iterated. Iteration will happen every 10 s on each active planet.
-	crackdownPerformanceWildScanPlayerFindRadius = 256 -- 256m radius
+
+-- PRODUCTION SERVER VALUES
+crackdownScanPrivilegedPlayers = false
+wildScanInterval = 10 * 60 -- In seconds
+wildScanChance = 15 -- % chance for a valid scan target to be scanned
+crackdownPlayerScanCooldown = 2 * 24 * 60 * 60  -- In seconds, 48 hour cooldown
+crackdownContrabandFineCredits = 10000
+crackdownContrabandFineFactionPoints = 100
+crackdownPlanetsWithWildScans = { "corellia", "dantooine", "dathomir", "endor", "lok", "naboo", "rori", "talus", "tatooine", "yavin4"}
 
 -- discount percentage for side losing&winning the gcw.  negative value of increase in price (penality).  positive for a decrease (Bonus)
 
@@ -318,8 +316,14 @@ squadFormations = {
 	{"stormtrooper_easy",
 		{"stormtrooper_squad_leader", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper"},
 	},
+	{"stormtrooper_easy_atst",
+		{"stormtrooper_squad_leader", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "stormtrooper", "at_st"},
+	},
 	{"stormtrooper_extreme",
 		{"fbase_stormtrooper_squad_leader_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme"},
+	},
+	{"stormtrooper_extreme_atst",
+		{"fbase_stormtrooper_squad_leader_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "fbase_stormtrooper_extreme", "at_st"},
 	},
 	{"novatrooper",
 		{"novatrooper_squad_leader", "elite_novatrooper", "elite_novatrooper", "elite_novatrooper", "elite_novatrooper", "elite_novatrooper", "elite_novatrooper", "elite_novatrooper", "elite_novatrooper", "dark_trooper_novatrooper", "dark_trooper_novatrooper", "novatrooper_medic", "novatrooper_ensign"},

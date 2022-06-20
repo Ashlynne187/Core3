@@ -500,6 +500,15 @@ WeaponObject* AiAgentImplementation::createWeapon(uint32 templateCRC, bool prima
 			newWeapon->setAttackSpeed(petDeed->getAttackSpeed());
 		}
 
+		int lightsaberColor = npcTemplate->getLightsaberColor();
+
+		if (newWeapon->isJediWeapon() && lightsaberColor > 0) {
+			Locker weaplock(newWeapon);
+
+			newWeapon->setBladeColor(lightsaberColor);
+			newWeapon->setCustomizationVariable("/private/index_color_blade", lightsaberColor, true);
+		}
+
 		if (newWeapon != defaultWeapon) {
 			if (inventory->transferObject(newWeapon, -1, false, true))
 				inventory->broadcastObject(newWeapon, true);
@@ -1333,8 +1342,11 @@ void AiAgentImplementation::runAway(CreatureObject* target, float range, bool ra
 	setNextPosition(runTrajectory.getX(), getZoneUnsafe()->getHeight(runTrajectory.getX(), runTrajectory.getY()), runTrajectory.getY(), getParent().get().castTo<CellObject*>());
 }
 
-void AiAgentImplementation::leash() {
+void AiAgentImplementation::leash(bool forcePeace) {
 	Locker locker(&targetMutex);
+
+	if (!forcePeace && getFollowObject() != nullptr)
+		removeDefender(getFollowObject().get());
 
 	clearPatrolPoints();
 	currentFoundPath = nullptr;
@@ -1349,7 +1361,8 @@ void AiAgentImplementation::leash() {
 	clearQueueActions();
 	clearDots();
 
-	CombatManager::instance()->forcePeace(asAiAgent());
+	if (forcePeace)
+		CombatManager::instance()->forcePeace(asAiAgent());
 }
 
 void AiAgentImplementation::setDefender(SceneObject* defender) {
@@ -1702,6 +1715,7 @@ void AiAgentImplementation::notifyDespawn(Zone* zone) {
 	stateBitmask = 0;
 
 	shockWounds = 0;
+	unmitigatedDamage = 0;
 
 	if (threatMap != nullptr)
 		threatMap->removeAll();
@@ -1862,7 +1876,7 @@ void AiAgentImplementation::activatePostureRecovery() {
 }
 
 void AiAgentImplementation::activateHAMRegeneration(int latency) {
-	if (isIncapacitated() || isDead() || isInCombat())
+	if (isIncapacitated() || isDead() || isInCombat() || isHamRegenDisabled())
 		return;
 
 	uint32 healthTick = (uint32) Math::max(1.f, (float) ceil(getMaxHAM(CreatureAttribute::HEALTH) / 300000.f * latency));
@@ -2693,7 +2707,7 @@ int AiAgentImplementation::setDestination() {
 
 	switch (stateCopy) {
 	case AiAgent::OBLIVIOUS:
-		if (!(creatureBitmask & CreatureFlag::STATIONARY) && !homeLocation.isInRange(asAiAgent(), 1.0f)) {
+		if (!(creatureBitmask & CreatureFlag::EVENTCONTROL) && !(creatureBitmask & CreatureFlag::STATIONARY) && !homeLocation.isInRange(asAiAgent(), 1.0f)) {
 			homeLocation.setReached(false);
 			setMovementState(AiAgent::PATHING_HOME);
 		}
@@ -3172,13 +3186,14 @@ int AiAgentImplementation::inflictDamage(TangibleObject* attacker, int damageTyp
 }
 
 void AiAgentImplementation::notifyPackMobs(SceneObject* attacker) {
-	if (!lastPackNotify.isPast())
+	auto closeObjectsVector = getCloseObjects();
+
+	if (!lastPackNotify.isPast() || closeObjectsVector == nullptr)
 		return;
 
 	lastPackNotify.updateToCurrentTime();
 	lastPackNotify.addMiliTime(30000);
 
-	auto closeObjectsVector = getCloseObjects();
 	Vector<QuadTreeEntry*> closeObjects(closeObjectsVector->size(), 10);
 	closeObjectsVector->safeCopyReceiversTo(closeObjects, CloseObjectsVector::CREOTYPE);
 	uint32 socialGroup = getSocialGroup().toLowerCase().hashCode();
@@ -3407,7 +3422,7 @@ void AiAgentImplementation::fillAttributeList(AttributeListMessage* alm, Creatur
 		}
 	}
 
-	if (player->getPlayerObject() && player->getPlayerObject()->hasGodMode()) {
+	if (player != nullptr && player->getPlayerObject() && player->getPlayerObject()->hasGodMode()) {
 		ManagedReference<SceneObject*> home = homeObject.get();
 
 		if (home != nullptr) {
@@ -3519,7 +3534,7 @@ bool AiAgentImplementation::isAggressive(CreatureObject* target) {
 	bool targetIsPlayer = target->isPlayerCreature();
 	bool targetIsAgent = target->isAiAgent();
 
-	if (targetIsAgent && target->isPet()) {
+	if (targetIsAgent && target->isPet() && !target->asAiAgent()->isMindTricked()) {
 		ManagedReference<PetControlDevice*> pcd = target->getControlDevice().get().castTo<PetControlDevice*>();
 
 		if (pcd != nullptr && pcd->getPetType() == PetManager::FACTIONPET && isNeutral())
@@ -3533,7 +3548,7 @@ bool AiAgentImplementation::isAggressive(CreatureObject* target) {
 		return isAggressiveTo(owner);
 	}
 
-	if (isPet()) {
+	if (isPet() && !isMindTricked()) {
 		ManagedReference<PetControlDevice*> pcd = getControlDevice().get().castTo<PetControlDevice*>();
 
 		if (pcd != nullptr && pcd->getPetType() == PetManager::FACTIONPET && target->isNeutral()) {
@@ -3636,7 +3651,7 @@ bool AiAgentImplementation::isAttackableBy(TangibleObject* object) {
 	if (movementState == AiAgent::LEASHING || isDead() || isIncapacitated())
 		return false;
 
-	if (isPet()) {
+	if (isPet() && !isMindTricked()) {
 		ManagedReference<PetControlDevice*> pcd = getControlDevice().get().castTo<PetControlDevice*>();
 
 		if (pcd != nullptr && pcd->getPetType() == PetManager::FACTIONPET && object->isNeutral())
@@ -3652,6 +3667,15 @@ bool AiAgentImplementation::isAttackableBy(TangibleObject* object) {
 
 	// Initial this creature has an attackable pvpStatusBitmask
 	if (!(pvpStatusBitmask & CreatureFlag::ATTACKABLE) || optionsBitmask & OptionBitmask::INVULNERABLE)
+		return false;
+
+	if (eventArea.get() != nullptr) {
+		if (!object->hasActiveArea(eventArea.get())) {
+			return false;
+		}
+	}
+
+	if (isInNoCombatArea())
 		return false;
 
 	// Get factions
@@ -3679,7 +3703,7 @@ bool AiAgentImplementation::isAttackableBy(CreatureObject* creature) {
 		return false;
 
 	// Handle Pets - Check against owner
-	if (isPet()) {
+	if (isPet() && !isMindTricked()) {
 		ManagedReference<PetControlDevice*> pcd = getControlDevice().get().castTo<PetControlDevice*>();
 		if (pcd != nullptr && pcd->getPetType() == PetManager::FACTIONPET && creature->isNeutral()) {
 			return false;
@@ -3720,6 +3744,15 @@ bool AiAgentImplementation::isAttackableBy(CreatureObject* creature) {
 
 		return isAttackableBy(owner);
 	}
+
+	if (eventArea.get() != nullptr) {
+		if (!creature->hasActiveArea(eventArea.get())) {
+			return false;
+		}
+	}
+
+	if (isInNoCombatArea())
+		return false;
 
 	bool creatureIsAgent = creature->isAiAgent();
 	bool creatureIsPlayer = creature->isPlayerCreature();
@@ -3933,6 +3966,63 @@ float AiAgentImplementation::getEffectiveResist() {
 	if (!isSpecialProtection(SharedWeaponObjectTemplate::STUN) && getStun() > 0)
 		return getStun();
 	return 0;
+}
+
+float AiAgentImplementation::getReducedResist(float value) {
+	if (value == -1) {
+		return value;
+	}
+
+	float newValue = value;
+
+	if (isPet()) {
+		float shockWounds = getShockWounds();
+
+		if (shockWounds <= 500) {
+			return newValue;
+		}
+
+		newValue = value - (value * (shockWounds - 500) * 0.001);
+
+		return newValue;
+	}
+
+	int totalHAM = 0;
+	int i = 0;
+
+	// Get total of max HAM pools
+	while (i <= 6) {
+		totalHAM += getMaxHAM(i);
+		i += 3;
+	}
+
+	// Total damage that was not resisted by armor
+	int unmitigatedDamage = getUnmitigatedDamage();
+
+	// Damage not prevented by armor resists compared to totalHAM
+	float percentUnmitigated = unmitigatedDamage / (float)totalHAM;
+
+#ifdef DEBUG_RESIST_DECAY
+	info (true) << " Value of HAM mitigated = " << mitigatedAmount;
+#endif
+
+	// Decay resists when mitigated damage is greater than 25% totalHAM
+	if (percentUnmitigated > 0.25f) {
+		// Reduce resists 2% for every 1% of damage mitigated by armor valued greater than 25% of totalHAM.
+		// Reduction Range is from 75% to 50% of totalHAM. totaling a max 50% reduction of resists
+		float reduction = (percentUnmitigated - 0.25f) * 2.f;
+
+		// Resists never drop below 50%
+		reduction = 1.f - (reduction > 0.50f ? 0.50f : reduction);
+
+		newValue = (value * reduction);
+
+#ifdef DEBUG_RESIST_DECAY
+		info(true) << "getReducedResist: totalHAM = " << totalHAM << " Resist Mitigation = " << unmitigatedDamage << " Start value: " << value << " New Value = " << newValue << " Reduction percent = " << reduction;
+#endif
+	}
+
+	return newValue;
 }
 
 void AiAgentImplementation::setPatrolPoints(PatrolPointsVector& pVector) {

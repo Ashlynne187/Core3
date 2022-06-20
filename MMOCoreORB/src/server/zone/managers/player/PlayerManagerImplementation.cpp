@@ -1169,7 +1169,7 @@ int PlayerManagerImplementation::notifyDestruction(TangibleObject* destructor, T
 		killPlayer(destructor, playerCreature, 0, isCombatAction);
 	} else {
 
-		playerCreature->setPosture(CreaturePosture::INCAPACITATED, !isCombatAction, !isCombatAction);
+		playerCreature->setPosture(CreaturePosture::INCAPACITATED, true, true);
 		playerCreature->clearCombatState(false);
 		playerCreature->clearState(CreatureState::FEIGNDEATH); // We got incapped for real - Remove the state so we can be DB'd
 
@@ -1767,7 +1767,10 @@ void PlayerManagerImplementation::sendPlayerToCloner(CreatureObject* player, uin
 
 	}
 
-
+	if (ConfigManager::instance()->getBool("Core3.PlayerManager.WipeFillingOnClone", false)) {
+		ghost->setFoodFilling(0);
+		ghost->setDrinkFilling(0);
+	}
 
 	Reference<Task*> task = new PlayerIncapacitationRecoverTask(player, true);
 	task->schedule(3 * 1000);
@@ -1928,6 +1931,9 @@ void PlayerManagerImplementation::disseminateExperience(TangibleObject* destruct
 				continue;
 			}
 
+			if (destructedObject->isAiAgent() && destructedObject->asAiAgent()->isEventMob())
+				continue;
+
 			CreatureObject* attackerCreo = attacker->asCreatureObject();
 
 			if (attackerCreo == nullptr) {
@@ -1950,6 +1956,7 @@ void PlayerManagerImplementation::disseminateExperience(TangibleObject* destruct
 			Locker crossLocker(owner, destructedObject);
 
 			PlayerObject* ownerGhost = owner->getPlayerObject();
+
 			if (ownerGhost == nullptr || !owner->hasSkill("outdoors_creaturehandler_novice") || !destructedObject->isInRange(owner, 80)) {
 				continue;
 			}
@@ -2663,6 +2670,8 @@ bool PlayerManagerImplementation::checkTradeItems(CreatureObject* player, Creatu
 						return false;
 
 					receiverDroidsTraded++;
+				} else if (petControlDevice->getPetType() == PetManager::HELPERDROIDPET) {
+					return false;
 				}
 			} else if (scene->isVehicleControlDevice()) {
 				VehicleControlDevice* vehicleControlDevice = cast<VehicleControlDevice*>(scene.get());

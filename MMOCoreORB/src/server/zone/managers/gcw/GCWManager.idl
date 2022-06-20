@@ -82,11 +82,11 @@ class GCWManager extends ManagedService implements Logger {
 	private transient int winnerDifficultyScaling;
 	private transient boolean crackdownScansEnabled;
 	private transient boolean crackdownScanPrivilegedPlayers;
-	private transient int crackdownScanInterval;
+	private transient int wildScanInterval;
+	private transient int wildScanChance;
 	private transient int crackdownPlayerScanCooldown;
 	private transient int crackdownContrabandFineCredits;
 	private transient int crackdownContrabandFineFactionPoints;
-	private transient int crackdownPerformanceWildScanPlayerFindRadius;
 
 	public transient unsigned long gcwCheckTimer;
 	public transient int vulnerabilityDuration;
@@ -196,7 +196,8 @@ class GCWManager extends ManagedService implements Logger {
 	public native void addScanner(BuildingObject building, SceneObject scanner);
 	public native void addTurret(BuildingObject building, SceneObject turret);
 	public native void addBaseAlarm(BuildingObject building, SceneObject alarm);
-	public native void spawnSecurityPatrol(BuildingObject building, string patrol, @dereferenced Vector3 location, unsigned long parentID, float direction, boolean stationary = false, boolean attackable = true);
+
+	public native unsigned long spawnSecurityPatrol(BuildingObject building, string patrol, @dereferenced Vector3 location, unsigned long parentID, float direction, boolean stationary = false, boolean attackable = true);
 	public native void spawnBaseSecurityPatrols(BuildingObject building);
 
 	public native void startVulnerability(BuildingObject building);
@@ -460,8 +461,14 @@ class GCWManager extends ManagedService implements Logger {
 
 	@local
 	@read
-	public int getCrackdownScanInterval() {
-		return crackdownScanInterval;
+	public int getWildScanInterval() {
+		return wildScanInterval;
+	}
+
+	@local
+	@read
+	public int getWildScanChance() {
+		return wildScanChance;
 	}
 
 	@local
